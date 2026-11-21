@@ -4,7 +4,8 @@
 //!
 //! A ref id is either a full claim id (40 hex characters), which is what every listing returns,
 //! or an LBRY URL without its scheme (`@Odysee#8/channel-roundup#e`), which is what a shared link
-//! carries: short claim ids can only be expanded by the service, and `parse_url` cannot call it.
+//! carries: short claim ids can only be expanded by the service, and `parse_url` cannot call it;
+//! `resolve` returns the canonical ref.
 
 use flaneur_connector::Target;
 use flaneur_model::{ChannelRef, ItemRef, PlaylistRef, ServiceId};
@@ -118,29 +119,16 @@ fn target(service: &ServiceId, segments: &[&str]) -> Option<Target> {
     }
 }
 
-/// Recognizes an `lbry://` URL from its raw text, `@` included.
-pub(crate) fn parse_lbry(service: &ServiceId, uri: &str) -> Option<Target> {
-    let rest = uri.strip_prefix("lbry://")?;
-    let rest = rest.split(['?', '&']).next().unwrap_or(rest);
-    let segments: Vec<&str> = rest.split('/').collect();
-    target(service, &segments)
-}
-
-/// Recognizes `https://odysee.com/...` and `lbry://...` URLs.
-pub(crate) fn parse(service: &ServiceId, url: &Url) -> Option<Target> {
-    if url.scheme() == "lbry" {
-        // WHATWG parsing reads the `@` of `lbry://@channel` as an empty user name and drops it,
-        // so a `Url` cannot tell `lbry://@name` from `lbry://name`. Two segments are always a
-        // channel and a stream; one segment is taken as a stream. `parse_lbry` reads the raw text.
-        let rest = url.as_str().strip_prefix("lbry://")?;
+/// Recognizes `https://odysee.com/...` and `lbry://...` links, from their raw text: URL parsing
+/// would read the `@` of `lbry://@channel` as an empty user name and drop it.
+pub(crate) fn parse(service: &ServiceId, text: &str) -> Option<Target> {
+    let text = text.trim();
+    if let Some(rest) = text.strip_prefix("lbry://") {
         let rest = rest.split(['?', '&']).next().unwrap_or(rest);
-        let mut segments: Vec<String> = rest.split('/').map(str::to_owned).collect();
-        if segments.len() == 2 && !segments[0].starts_with('@') {
-            segments[0].insert(0, '@');
-        }
-        let segments: Vec<&str> = segments.iter().map(String::as_str).collect();
+        let segments: Vec<&str> = rest.split('/').collect();
         return target(service, &segments);
     }
+    let url = Url::parse(text).ok()?;
     if !matches!(url.scheme(), "http" | "https") || !HOSTS.contains(&url.host_str()?) {
         return None;
     }
@@ -170,7 +158,7 @@ mod tests {
     }
 
     fn parse_str(s: &str) -> Option<Target> {
-        parse(&service(), &Url::parse(s).unwrap())
+        parse(&service(), s)
     }
 
     #[allow(clippy::unnecessary_wraps)]
@@ -247,16 +235,12 @@ mod tests {
         );
         assert_eq!(parse_str(&format!("lbry://channel-roundup#{ID}")), item(ID));
         assert_eq!(parse_str("lbry://@Odysee/@Other"), None);
-        // A `Url` drops the `@` of a lone channel: only the raw text keeps it.
-        assert_eq!(parse_str("lbry://@Odysee#8"), item("Odysee#8"));
+        assert_eq!(parse_str("lbry://@Odysee#8"), channel("@Odysee#8"));
         assert_eq!(
-            parse_lbry(&service(), "lbry://@Odysee#8"),
-            channel("@Odysee#8")
-        );
-        assert_eq!(
-            parse_lbry(&service(), "lbry://@Odysee#8/missinfo#d"),
+            parse_str("lbry://@Odysee#8/missinfo#d"),
             item("@Odysee#8/missinfo#d")
         );
+        assert_eq!(parse_str("not a link"), None);
     }
 
     #[test]

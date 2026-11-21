@@ -4,8 +4,9 @@
 //! the Flâneur model.
 
 use flaneur_model::{
-    Channel, ChannelRef, ChannelSummary, ContentFlags, Item, ItemKind, ItemRef, Playlist,
-    PlaylistRef, Precision, Published, Seconds, ServiceId, Thumbnail, Timestamp,
+    Channel, ChannelRef, ChannelSummary, ContentFlags, Dimensions as Frame, Item, ItemKind,
+    ItemRef, Playlist, PlaylistKind, PlaylistRef, Precision, Published, Seconds, ServiceId,
+    Thumbnail, Timestamp,
 };
 use serde::{Deserialize, Deserializer};
 use url::Url;
@@ -243,18 +244,21 @@ impl Claim {
 
     /// The web app's rule: at most 180 s, and at most 0.8 wide for 1 high.
     pub fn is_short(&self) -> bool {
-        let Some(video) = self.value.video else {
-            return false;
-        };
-        let (Some(duration), Some(width), Some(height)) =
-            (video.duration, video.width, video.height)
+        let (Some(duration), Some(frame)) =
+            (self.value.video.and_then(|v| v.duration), self.frame())
         else {
             return false;
         };
         duration > 0
             && duration <= SHORTS_MAX_DURATION
-            && height > 0
-            && f64::from(width) / f64::from(height) <= SHORTS_MAX_ASPECT_RATIO
+            && f64::from(frame.width) / f64::from(frame.height) <= SHORTS_MAX_ASPECT_RATIO
+    }
+
+    /// Frame size of a video, when the claim gives both sides.
+    pub fn frame(&self) -> Option<Frame> {
+        let video = self.value.video?;
+        let (width, height) = (video.width?, video.height?);
+        (width > 0 && height > 0).then_some(Frame { width, height })
     }
 
     /// Release time, falling back to the block time, then the creation time.
@@ -324,6 +328,7 @@ impl Claim {
     pub fn to_playlist(&self, service: &ServiceId) -> Playlist {
         Playlist {
             r#ref: PlaylistRef::new(service.clone(), &self.claim_id),
+            kind: PlaylistKind::Regular,
             title: self.title(),
             channel: self
                 .signing_channel
@@ -371,6 +376,7 @@ impl Claim {
                 .map(|c| c.channel_summary(service)),
             thumbnails: thumbnail_url(self.value.thumbnail.as_ref())
                 .map_or_default(|u| card_thumbnails(&u)),
+            dimensions: self.frame(),
             views: None,
             reactions: flaneur_model::ReactionCounts::default(),
             flags: ContentFlags {
@@ -518,6 +524,13 @@ mod tests {
         assert_eq!(item.flags.sensitive, Some(false));
         assert_eq!(item.flags.members_only, Some(false));
         assert_eq!(item.views, None);
+        assert_eq!(
+            item.dimensions,
+            Some(Frame {
+                width: 1920,
+                height: 1080
+            })
+        );
         let widest = Thumbnail::best_for_width(&item.thumbnails, 1000).unwrap();
         assert_eq!(widest.width, Some(1280));
         assert!(

@@ -10,8 +10,8 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use flaneur_connector::{Error, Library, PlaybackReport, Reactions, Result, Subscriptions};
 use flaneur_model::{
-    ChannelRef, ChannelSummary, Cursor, Item, ItemRef, Page, Playlist, PlaylistRef, Progress,
-    Reaction, Timestamp, WatchState,
+    ChannelRef, ChannelSummary, Cursor, Item, ItemRef, Page, Playlist, PlaylistKind, PlaylistRef,
+    Progress, Reaction, Timestamp, WatchState,
 };
 use serde::Deserialize;
 
@@ -151,7 +151,7 @@ impl Library for Odysee {
                         duration: item.duration,
                         updated_at: viewed.get(id).copied().flatten().unwrap_or(now),
                     }),
-                    watched: false,
+                    watched: None,
                     reaction: None,
                 });
                 item
@@ -176,6 +176,11 @@ impl Library for Odysee {
                 let builtin = preference.builtin(id);
                 Playlist {
                     r#ref: PlaylistRef::new(self.service().clone(), id),
+                    kind: if id == WATCH_LATER {
+                        PlaylistKind::WatchLater
+                    } else {
+                        PlaylistKind::Regular
+                    },
                     title: builtin
                         .and_then(|b| b.name.clone())
                         .unwrap_or_else(|| builtin_title(id).to_owned()),

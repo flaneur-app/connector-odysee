@@ -35,13 +35,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use async_trait::async_trait;
 use flaneur_connector::{
     AuthMethod, Capabilities, Channels, Comments, Connector, Credentials, Error, Feeds, Library,
-    Player, Reactions, Result, Search, ServiceInfo, Session, Subscriptions, Support, Target,
+    PendingSignIn, Player, Reactions, Result, Search, ServiceInfo, Session, Subscriptions, Support,
+    Target,
 };
 use flaneur_model::{Cursor, Item, ServiceId, Timestamp};
 use serde_json::{Value, json};
-use url::Url;
 
-pub use auth::{DefaultChannel, PendingSignIn};
+pub use auth::DefaultChannel;
 pub use http::Endpoints;
 
 use auth::SessionState;
@@ -102,7 +102,7 @@ impl OdyseeBuilder {
             info: ServiceInfo {
                 id: ServiceId::new(SERVICE_ID),
                 name: "Odysee".to_owned(),
-                auth_methods: vec![AuthMethod::Password],
+                auth_methods: vec![AuthMethod::Password, AuthMethod::EmailLink],
             },
             language: self.language,
             session: RwLock::new(None),
@@ -126,29 +126,6 @@ impl Odysee {
     /// The channel comments are posted with, when the signed-in account has one.
     pub fn default_channel(&self) -> Option<DefaultChannel> {
         self.state().and_then(|s| s.channel)
-    }
-
-    /// Starts a passwordless sign-in: Odysee emails a link to `email`. The user opens it in any
-    /// browser; meanwhile, call [`Odysee::poll_sign_in_link`] every few seconds.
-    pub async fn send_sign_in_link(&self, email: &str) -> Result<PendingSignIn> {
-        auth::send_link(&self.api, &self.language, email).await
-    }
-
-    /// `None` while the link of [`Odysee::send_sign_in_link`] was not opened; the session, now
-    /// active, once it was.
-    pub async fn poll_sign_in_link(&self, pending: &PendingSignIn) -> Result<Option<Session>> {
-        let Some(state) = auth::poll_link(&self.api, pending).await? else {
-            return Ok(None);
-        };
-        let session = state.to_session(&self.info.id)?;
-        self.set_state(Some(state));
-        Ok(Some(session))
-    }
-
-    /// Recognizes an `lbry://` URI from its raw text. Prefer it to [`Connector::parse_url`] for
-    /// `lbry://` links: a parsed [`Url`] has lost the `@` of `lbry://@channel`.
-    pub fn parse_lbry(&self, uri: &str) -> Option<Target> {
-        links::parse_lbry(self.service(), uri)
     }
 
     fn service(&self) -> &ServiceId {
@@ -296,6 +273,9 @@ impl Connector for Odysee {
             history_read: Support::SignedIn,
             // Positions reach Odysee only through its playback analytics (watchman).
             history_write: Support::Unsupported,
+            // Published collections, channel playlists included.
+            public_playlists: Support::Anonymous,
+            // Watch later and favourites, from the shared preference.
             playlists_read: Support::SignedIn,
             // Watch later lives in the shared preference: see the crate docs.
             playlists_write: Support::Unsupported,
@@ -305,6 +285,7 @@ impl Connector for Odysee {
             reactions_write: Support::SignedIn,
             comments_read: Support::Anonymous,
             comments_write: Support::SignedIn,
+            comment_replies_write: Support::SignedIn,
         }
     }
 
@@ -336,11 +317,24 @@ impl Connector for Odysee {
         Ok(())
     }
 
-    fn sign_out(&self) {
+    async fn send_sign_in_link(&self, email: &str) -> Result<PendingSignIn> {
+        auth::send_link(&self.api, &self.language, email).await
+    }
+
+    async fn poll_sign_in_link(&self, pending: &PendingSignIn) -> Result<Option<Session>> {
+        let Some(state) = auth::poll_link(&self.api, pending).await? else {
+            return Ok(None);
+        };
+        let session = state.to_session(self.service())?;
+        self.set_state(Some(state));
+        Ok(Some(session))
+    }
+
+    async fn sign_out(&self) {
         self.set_state(None);
     }
 
-    fn parse_url(&self, url: &Url) -> Option<Target> {
+    fn parse_url(&self, url: &str) -> Option<Target> {
         links::parse(self.service(), url)
     }
 

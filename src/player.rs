@@ -107,6 +107,7 @@ fn file_stream(url: Url, claim: &Claim, media_type: &str, size: Option<u64>) -> 
         video_codec: None,
         hdr: None,
         audio: None,
+        label: Some("Original file".to_owned()),
     }
 }
 
@@ -255,7 +256,7 @@ impl Player for Odysee {
                     duration: details.duration,
                     updated_at: Self::now(),
                 }),
-                watched: false,
+                watched: None,
                 reaction: my_reaction,
             });
         }
@@ -269,6 +270,9 @@ impl Player for Odysee {
             expires_at: None,
             start_at,
             tracking: None,
+            // The VOD CDN needs no header; the live one needs a Referer (see the crate docs).
+            headers: Vec::new(),
+            handoff: None,
         })
     }
 

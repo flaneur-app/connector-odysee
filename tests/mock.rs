@@ -256,6 +256,7 @@ async fn email_link_sign_in_polls_until_the_link_is_opened() {
 
     let pending = odysee.send_sign_in_link("me@example.org").await.unwrap();
     assert!(!format!("{pending:?}").contains(TOKEN));
+    assert!(pending.message.is_some());
     assert!(odysee.poll_sign_in_link(&pending).await.unwrap().is_none());
     let session = odysee.poll_sign_in_link(&pending).await.unwrap().unwrap();
     assert_eq!(
@@ -289,11 +290,20 @@ async fn capabilities_follow_the_session() {
     let caps = odysee.capabilities();
     assert!(caps.signed_in);
     assert!(caps.comments_write.available(true));
+    assert!(caps.comment_replies_write.available(true));
+    assert_eq!(caps.public_playlists, Support::Anonymous);
+    assert_eq!(caps.playlists_read, Support::SignedIn);
+    assert!(
+        odysee
+            .info()
+            .auth_methods
+            .contains(&flaneur_connector::AuthMethod::EmailLink)
+    );
     assert_eq!(caps.subscriptions_read, Support::SignedIn);
     assert_eq!(caps.subscriptions_write, Support::Unsupported);
     assert_eq!(caps.playlists_write, Support::Unsupported);
     assert_eq!(caps.history_write, Support::Unsupported);
-    odysee.sign_out();
+    odysee.sign_out().await;
     assert!(!odysee.capabilities().signed_in);
     assert_eq!(odysee.default_channel(), None);
 }
@@ -442,6 +452,7 @@ async fn posting_a_reply_signs_through_the_proxy() {
     assert_eq!(comment.text, "hé");
     assert_eq!(comment.author.name, "@me");
     assert_eq!(comment.reply_count, Some(0));
+    assert_eq!(comment.reply_token.as_deref(), Some("new"));
 
     // The token goes to the proxy only, never to Commentron.
     for request in server.received_requests().await.unwrap() {
@@ -496,6 +507,7 @@ async fn parses_a_comment_page() {
     assert_eq!(first.likes, Some(244));
     assert_eq!(first.reply_count, Some(11));
     assert_eq!(first.replies_token.as_deref(), Some(first.id.as_str()));
+    assert_eq!(first.reply_token.as_deref(), Some(first.id.as_str()));
     assert_eq!(first.published.unwrap().at, 1_670_435_179);
     assert!(!first.hearted && !first.pinned);
     // Not in the reaction fixture: unknown, not zero.
@@ -531,7 +543,9 @@ async fn history_reads_view_history_and_resume_positions() {
     let page = odysee.library().unwrap().history(None).await.unwrap();
     assert_eq!(page.items.len(), 1);
     assert_eq!(page.next.as_ref().unwrap().0, "2");
-    let progress = page.items[0].watch.unwrap().progress.unwrap();
+    let watch = page.items[0].watch.unwrap();
+    assert_eq!(watch.watched, None);
+    let progress = watch.progress.unwrap();
     assert_eq!(progress.position, 42);
     assert_eq!(progress.updated_at, 1_795_168_800);
 }
@@ -585,6 +599,14 @@ async fn subscriptions_and_watch_later_come_from_the_shared_preference() {
     let library = odysee.library().unwrap();
     let playlists = library.playlists(None).await.unwrap();
     assert_eq!(playlists.items[0].item_count, Some(1));
+    assert_eq!(
+        playlists.items[0].kind,
+        flaneur_model::PlaylistKind::WatchLater
+    );
+    assert_eq!(
+        playlists.items[1].kind,
+        flaneur_model::PlaylistKind::Regular
+    );
     let watch_later = library
         .playlist_items(&PlaylistRef::new(service(), "watchlater"), None)
         .await
@@ -837,8 +859,4 @@ async fn channel_tabs_and_short_links() {
         .unwrap();
     assert_eq!(page.total, Some(31));
     assert!(page.next.is_none());
-    assert!(matches!(
-        channels.items(&channel, ChannelTab::Playlists, None).await,
-        Err(Error::Unsupported)
-    ));
 }

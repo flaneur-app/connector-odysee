@@ -14,7 +14,6 @@ use flaneur_connector::{
 };
 use flaneur_connector_odysee::Odysee;
 use flaneur_model::{ChannelRef, ItemKind, ItemRef, ServiceId};
-use url::Url;
 
 /// `@Odysee`.
 const ODYSEE_CHANNEL: &str = "80d2590ad04e36fb1d077a9b9e3a8bba76defdf8";
@@ -151,8 +150,8 @@ async fn resolve_and_related() {
     assert!(related.items.iter().all(|i| i.r#ref.id != VIDEO));
 
     // From a shared link with short claim ids.
-    let url = Url::parse("https://odysee.com/@Odysee:8/missinfo:d").unwrap();
-    let Some(Target::Item(shared)) = odysee.parse_url(&url) else {
+    let Some(Target::Item(shared)) = odysee.parse_url("https://odysee.com/@Odysee:8/missinfo:d")
+    else {
         panic!("not an item");
     };
     let playable = player.resolve(&shared).await.unwrap();
