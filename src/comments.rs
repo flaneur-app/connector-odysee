@@ -102,6 +102,8 @@ impl CommentItem {
             likes: count("like"),
             reply_count: Some(self.replies),
             replies_token: (self.replies > 0).then(|| self.comment_id.clone()),
+            // A reply is posted with the comment's id as `parent_id`.
+            reply_token: Some(self.comment_id.clone()),
             pinned: self.is_pinned,
             hearted: count("creator_like").is_some_and(|n| n > 0),
             my_reaction: None,

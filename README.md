@@ -24,8 +24,8 @@ Everything goes from the user's machine to Odysee: there is no Flâneur server i
 | Follow, unfollow, add to watch later | — | ❌ on purpose, see below |
 | Livestreams | listed | ❌ not played yet, see below |
 
-Sign-in: email and password, or a link sent by email (`Odysee::send_sign_in_link`). The session
-token is handed to the app, which keeps it in the OS keyring.
+Sign-in: email and password, or a link sent by email (`Connector::send_sign_in_link`, then
+`poll_sign_in_link`). The session token is handed to the app, which keeps it in the OS keyring.
 
 **Not done on purpose:**
 

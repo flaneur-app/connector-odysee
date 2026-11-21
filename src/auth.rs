@@ -10,7 +10,7 @@
 
 use std::fmt;
 
-use flaneur_connector::{Account, Error, Result, Session};
+use flaneur_connector::{Account, Error, PendingSignIn, Result, Session};
 use flaneur_model::ServiceId;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -87,18 +87,6 @@ impl SessionState {
             return Err(Error::SignInRequired);
         }
         Ok(state)
-    }
-}
-
-/// An email sign-in waiting for the user to open the link. Holds the session token: keep it in
-/// memory only.
-pub struct PendingSignIn {
-    pub(crate) state: SessionState,
-}
-
-impl fmt::Debug for PendingSignIn {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("PendingSignIn(<redacted>)")
     }
 }
 
@@ -251,16 +239,20 @@ pub(crate) async fn send_link(api: &Api, language: &str, email: &str) -> Result<
             Some(&state.auth_token),
         )
         .await?;
-    Ok(PendingSignIn { state })
+    Ok(PendingSignIn {
+        // The not-yet-verified session, in the same format as a session secret.
+        state: serde_json::to_string(&state).map_err(|e| Error::Parse(e.to_string()))?,
+        message: Some("Open the link Odysee sent to your email, in any browser.".to_owned()),
+    })
 }
 
 /// Checks whether the link was opened; `None` while it was not.
 pub(crate) async fn poll_link(api: &Api, pending: &PendingSignIn) -> Result<Option<SessionState>> {
-    let me = me(api, &pending.state.auth_token).await?;
+    let mut state = SessionState::from_secret(&pending.state)?;
+    let me = me(api, &state.auth_token).await?;
     if me.has_verified_email != Some(true) {
         return Ok(None);
     }
-    let mut state = pending.state.clone();
     complete(api, &mut state).await?;
     Ok(Some(state))
 }

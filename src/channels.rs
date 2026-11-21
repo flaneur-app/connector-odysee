@@ -14,7 +14,7 @@ use crate::{Odysee, next_page, page_number};
 const CHANNEL_PAGE_SIZE: usize = 30;
 
 /// `claim_search` parameters of a tab, without the page.
-pub(crate) fn tab_params(channel_id: &str, tab: ChannelTab) -> Option<Value> {
+pub(crate) fn tab_params(channel_id: &str, tab: ChannelTab) -> Value {
     let mut params = json!({
         "channel_ids": [channel_id],
         "claim_type": ["stream"],
@@ -36,9 +36,8 @@ pub(crate) fn tab_params(channel_id: &str, tab: ChannelTab) -> Option<Value> {
         ChannelTab::Lives => {
             params["has_no_source"] = json!(true);
         }
-        ChannelTab::Playlists => return None,
     }
-    Some(params)
+    params
 }
 
 #[async_trait]
@@ -72,10 +71,7 @@ impl Channels for Odysee {
         cursor: Option<&Cursor>,
     ) -> Result<Page<Item>> {
         let channel_id = self.claim_id(&channel.id).await?;
-        let Some(mut params) = tab_params(&channel_id, tab) else {
-            // Playlists are listed by `Channels::playlists`.
-            return Err(Error::Unsupported);
-        };
+        let mut params = tab_params(&channel_id, tab);
         let page = page_number(cursor)?;
         params["page"] = json!(page);
         let found = self.claim_search(params).await?;
