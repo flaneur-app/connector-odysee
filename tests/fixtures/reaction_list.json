@@ -1,0 +1,16 @@
+{
+ "success": true,
+ "error": null,
+ "data": {
+  "others_reactions": {
+   "d2bd744f12b05ed0bc1fee5030a55dbd73258e38": {
+    "dislike": 207,
+    "like": 2269
+   },
+   "ee58d95e7e42ec9479e13b28d57556f9ffb373dc": {
+    "dislike": 37,
+    "like": 213
+   }
+  }
+ }
+}
