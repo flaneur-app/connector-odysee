@@ -7,6 +7,18 @@
 //! transcoded it, an HLS ladder (`/v6/streams/{claim_id}/{sd_hash}/master.m3u8`). The web player
 //! finds the HLS by probing the file URL with an `odysee.com` `Referer`; Flâneur builds the master
 //! URL directly instead and treats a 404 as "no HLS yet".
+//!
+//! Which one to offer is decided from a 4 KiB ranged read of the file's head, done alongside the
+//! HLS probe (see [`choose`]):
+//!
+//! - The CDN refuses some files outright (`401 this content cannot be accessed at the moment`):
+//!   HLS only, or [`Error::Unavailable`] when there is no HLS either.
+//! - An MP4 whose index (`moov`) comes after the media (`mdat`) cannot start until the player has
+//!   fetched the end of the file; `GStreamer` over HTTP may read the whole file first. When HLS
+//!   exists, only HLS is offered.
+//! - Originals over 4 GiB are offered only as HLS when HLS exists: their bitrate is that of the
+//!   upload, and the HLS ladder adapts to the connection.
+//! - Otherwise both are offered and the view-model's selector picks.
 
 use std::collections::HashMap;
 
@@ -87,6 +99,74 @@ fn container(media_type: &str) -> Container {
     }
 }
 
+/// Bytes read from the head of the file to find its index.
+const HEAD_PROBE_LEN: u64 = 4096;
+/// Originals larger than this are left out when HLS exists.
+const MAX_ORIGINAL_WITH_HLS: u64 = 4 << 30;
+
+/// What the head of the original file says.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FileHead {
+    /// MP4 with its index first: plays at once over HTTP.
+    FastStart,
+    /// MP4 with its index after the media.
+    IndexAtEnd,
+    /// Not an MP4, or the boxes did not say within the probe.
+    Unknown,
+    /// The CDN refused the file (401, 403).
+    Refused,
+}
+
+/// Reads the top-level MP4 boxes of the head of a file.
+pub(crate) fn mp4_head(data: &[u8]) -> FileHead {
+    let mut offset = 0usize;
+    while let Some(header) = data.get(offset..offset + 8) {
+        let size32 = u32::from_be_bytes([header[0], header[1], header[2], header[3]]);
+        let size = match size32 {
+            // Extends to the end of the file: nothing comes after it.
+            0 => u64::MAX,
+            1 => match data.get(offset + 8..offset + 16) {
+                Some(b) => u64::from_be_bytes(b.try_into().unwrap_or([0; 8])),
+                None => return FileHead::Unknown,
+            },
+            n => u64::from(n),
+        };
+        match &header[4..8] {
+            b"moov" => return FileHead::FastStart,
+            b"mdat" => return FileHead::IndexAtEnd,
+            _ => {}
+        }
+        if size < 8 {
+            return FileHead::Unknown;
+        }
+        match usize::try_from(size)
+            .ok()
+            .and_then(|s| offset.checked_add(s))
+        {
+            Some(next) => offset = next,
+            None => return FileHead::Unknown,
+        }
+    }
+    FileHead::Unknown
+}
+
+/// The streams to offer, given what the probes found (see the module docs).
+pub(crate) fn choose(file: Stream, head: FileHead, hls: Option<&Url>) -> Result<Vec<Stream>> {
+    let huge = file.size.is_some_and(|s| s > MAX_ORIGINAL_WITH_HLS);
+    match (head, hls.is_some()) {
+        (FileHead::Refused, false) => Err(Error::Unavailable(
+            "Odysee's CDN refuses this file at the moment".into(),
+        )),
+        (FileHead::Refused | FileHead::IndexAtEnd, true) => Ok(Vec::new()),
+        (_, true) if huge => Ok(Vec::new()),
+        (FileHead::IndexAtEnd, false) => Ok(vec![Stream {
+            label: Some("Original file (index at the end: slow to start)".to_owned()),
+            ..file
+        }]),
+        _ => Ok(vec![file]),
+    }
+}
+
 /// The original file as a stream: muxed for videos, audio-only for audio files.
 fn file_stream(url: Url, claim: &Claim, media_type: &str, size: Option<u64>) -> Stream {
     let is_audio = media_type.starts_with("audio/");
@@ -154,6 +234,25 @@ impl Odysee {
             .proxy("get", json!({"uri": uri, "save_file": false}), None)
             .await?;
         Url::parse(&get.streaming_url).map_err(|e| Error::Parse(e.to_string()))
+    }
+
+    /// The original file's URL and what its head says.
+    async fn probed_file(
+        &self,
+        claim: &Claim,
+        media_type: &str,
+        sd_hash: &str,
+    ) -> Result<(Url, FileHead)> {
+        let url = self.file_url(claim, media_type, sd_hash).await?;
+        let head = match self.api.head_bytes(url.clone(), HEAD_PROBE_LEN).await {
+            Ok((status, _)) if matches!(status.as_u16(), 401 | 403) => FileHead::Refused,
+            Ok((status, data)) if status.is_success() && media_type.ends_with("/mp4") => {
+                mp4_head(&data)
+            }
+            // A 429 or a network error says nothing about the file.
+            _ => FileHead::Unknown,
+        };
+        Ok((url, head))
     }
 
     /// The HLS master playlist, when Odysee has transcoded the claim.
@@ -231,13 +330,13 @@ impl Player for Odysee {
             }
         };
         let (file, hls, reactions, views, position) = tokio::join!(
-            self.file_url(&claim, &media_type, &sd_hash),
+            self.probed_file(&claim, &media_type, &sd_hash),
             self.hls_master(claim_id, &sd_hash),
             self.reaction_list(claim_id, token),
             views,
             position,
         );
-        let file = file?;
+        let (file, head) = file?;
 
         let (counts, my_reaction) = reactions.map_or_default(|r| r.for_claim(claim_id));
         if let Some(counts) = counts {
@@ -261,10 +360,14 @@ impl Player for Odysee {
             });
         }
 
-        let stream = file_stream(file, &claim, &media_type, source.size);
+        let streams = choose(
+            file_stream(file, &claim, &media_type, source.size),
+            head,
+            hls.as_ref(),
+        )?;
         Ok(Playable {
             item: details,
-            streams: vec![stream],
+            streams,
             hls_manifest: hls,
             dash_manifest: None,
             expires_at: None,
@@ -306,6 +409,104 @@ impl Player for Odysee {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn head(boxes: &[(&[u8; 4], u32)]) -> Vec<u8> {
+        // Only the headers matter: each box is its header padded to its declared size.
+        let mut data = Vec::new();
+        for (kind, size) in boxes {
+            let start = data.len();
+            data.extend_from_slice(&size.to_be_bytes());
+            data.extend_from_slice(&kind[..]);
+            data.resize(start + *size as usize, 0);
+        }
+        data.truncate(4096);
+        data
+    }
+
+    #[test]
+    fn reads_the_mp4_box_order() {
+        assert_eq!(
+            mp4_head(&head(&[(b"ftyp", 32), (b"moov", 9000)])),
+            FileHead::FastStart
+        );
+        assert_eq!(
+            mp4_head(&head(&[(b"ftyp", 32), (b"mdat", 90_000)])),
+            FileHead::IndexAtEnd
+        );
+        assert_eq!(
+            mp4_head(&head(&[(b"ftyp", 32), (b"free", 8), (b"mdat", 90_000)])),
+            FileHead::IndexAtEnd
+        );
+        // A box larger than the probe hides what follows.
+        assert_eq!(
+            mp4_head(&head(&[(b"ftyp", 32), (b"uuid", 9000)])),
+            FileHead::Unknown
+        );
+        assert_eq!(mp4_head(b"not an mp4 at all"), FileHead::Unknown);
+        assert_eq!(mp4_head(&[]), FileHead::Unknown);
+    }
+
+    fn file(size: u64) -> Stream {
+        Stream {
+            url: Url::parse("https://cdn.example/f.mp4").unwrap(),
+            kind: StreamKind::Muxed,
+            container: Container::Mp4,
+            bitrate: None,
+            size: Some(size),
+            width: None,
+            height: None,
+            fps: None,
+            video_codec: None,
+            hdr: None,
+            audio: None,
+            label: None,
+        }
+    }
+
+    #[test]
+    fn prefers_hls_over_files_that_cannot_stream() {
+        let hls = Url::parse("https://cdn.example/master.m3u8").unwrap();
+        let mb = 1 << 20;
+        // Fast-start and reasonably sized: both, the selector picks.
+        assert_eq!(
+            choose(file(500 * mb), FileHead::FastStart, Some(&hls))
+                .unwrap()
+                .len(),
+            1
+        );
+        // Index at the end, refused, or huge: HLS only.
+        assert_eq!(
+            choose(file(500 * mb), FileHead::IndexAtEnd, Some(&hls))
+                .unwrap()
+                .len(),
+            0
+        );
+        assert_eq!(
+            choose(file(500 * mb), FileHead::Refused, Some(&hls))
+                .unwrap()
+                .len(),
+            0
+        );
+        assert_eq!(
+            choose(file(7400 * mb), FileHead::FastStart, Some(&hls))
+                .unwrap()
+                .len(),
+            0
+        );
+        // No HLS: the file is all there is, flagged when it will be slow to start.
+        let only = choose(file(7400 * mb), FileHead::IndexAtEnd, None).unwrap();
+        assert!(only[0].label.as_deref().unwrap().contains("slow to start"));
+        assert_eq!(
+            choose(file(7400 * mb), FileHead::Unknown, None)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(matches!(
+            choose(file(mb), FileHead::Refused, None),
+            Err(Error::Unavailable(_))
+        ));
+    }
 
     #[test]
     fn adds_my_reaction_back_to_the_counts() {

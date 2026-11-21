@@ -72,9 +72,11 @@ pub(crate) struct Claim {
     pub meta: Meta,
     #[serde(default)]
     pub value: ClaimValue,
-    #[serde(default)]
+    /// `None` too when the proxy could not resolve the channel: it then sends only
+    /// `{"channel_id": …}` (an invalid or abandoned channel signature).
+    #[serde(default, deserialize_with = "lenient_claim")]
     pub signing_channel: Option<Box<Claim>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "lenient_claim")]
     pub reposted_claim: Option<Box<Claim>>,
 }
 
@@ -151,7 +153,8 @@ pub(crate) struct Fee {
 /// One page of `claim_search`.
 #[derive(Debug, Deserialize)]
 pub(crate) struct ClaimSearch {
-    #[serde(default)]
+    /// Entries that are not claims are skipped: one odd entry must not lose the page.
+    #[serde(default, deserialize_with = "lenient_claims")]
     pub items: Vec<Claim>,
     #[serde(default)]
     pub total_items: Option<u64>,
@@ -454,6 +457,27 @@ fn lenient_i64<'de, D: Deserializer<'de>>(d: D) -> Result<Option<i64>, D::Error>
     })
 }
 
+/// A nested claim, or `None` when it is not a full claim.
+fn lenient_claim<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Box<Claim>>, D::Error> {
+    let value = Option::<serde_json::Value>::deserialize(d)?;
+    Ok(value
+        .and_then(|v| serde_json::from_value::<Claim>(v).ok())
+        .map(Box::new))
+}
+
+fn lenient_claims<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<Claim>, D::Error> {
+    let values = Option::<Vec<serde_json::Value>>::deserialize(d)?.unwrap_or_default();
+    let total = values.len();
+    let claims: Vec<Claim> = values
+        .into_iter()
+        .filter_map(|v| serde_json::from_value(v).ok())
+        .collect();
+    if claims.len() < total {
+        tracing::debug!(skipped = total - claims.len(), "malformed claims skipped");
+    }
+    Ok(claims)
+}
+
 fn lenient_u64<'de, D: Deserializer<'de>>(d: D) -> Result<Option<u64>, D::Error> {
     Ok(lenient_i64(d)?.and_then(|i| u64::try_from(i).ok()))
 }
@@ -569,6 +593,33 @@ mod tests {
         assert_eq!(placeholder.scheduled_start, None);
         // No title: the claim name stands in.
         assert_eq!(placeholder.title, "live83224");
+    }
+
+    #[test]
+    fn unresolved_signing_channels_do_not_lose_the_page() {
+        #[derive(Deserialize)]
+        struct Envelope {
+            result: ClaimSearch,
+        }
+        // A real page where one claim's channel signature is invalid: the proxy then sends
+        // `signing_channel: {"channel_id": …}` without a `claim_id`.
+        let json = include_str!("../tests/fixtures/claim_search_unresolved_channel.json");
+        let items = serde_json::from_str::<Envelope>(json).unwrap().result.items;
+        assert_eq!(items.len(), 2);
+        let unsigned = items
+            .iter()
+            .find(|c| c.claim_id.starts_with("8b494893"))
+            .unwrap()
+            .to_item(&service(), RECORDED)
+            .unwrap();
+        assert_eq!(unsigned.title, "Cats and kittens - 2011");
+        assert!(unsigned.channel.is_none());
+        assert!(items[0].signing_channel.is_some());
+
+        let broken =
+            r#"{"items": [{"name": "no-id"}, 7, {"claim_id": "ok", "value_type": "stream"}]}"#;
+        let page: ClaimSearch = serde_json::from_str(broken).unwrap();
+        assert_eq!(page.items.len(), 1);
     }
 
     #[test]
