@@ -24,6 +24,11 @@ Everything goes from the user's machine to Odysee: there is no Flâneur server i
 | Follow, unfollow, add to watch later | — | ❌ on purpose, see below |
 | Livestreams | listed | ❌ not played yet, see below |
 
+Playback offers the original file and, once Odysee has transcoded it, the HLS ladder. A 4 KiB
+read of the file's head decides: when the CDN refuses the file, when its MP4 index comes after the
+media (the player would have to fetch the end of the file before the first frame), or when it is
+over 4 GiB, only HLS is offered if it exists. The rule is documented in `src/player.rs`.
+
 Sign-in: email and password, or a link sent by email (`Connector::send_sign_in_link`, then
 `poll_sign_in_link`). The session token is handed to the app, which keeps it in the OS keyring.
 

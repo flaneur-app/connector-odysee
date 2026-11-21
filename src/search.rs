@@ -19,6 +19,15 @@ pub(crate) struct Hit {
     pub claim_id: String,
 }
 
+/// The claim ids of a Lighthouse answer, skipping entries without a valid one.
+pub(crate) fn hit_ids(hits: Vec<serde_json::Value>) -> Vec<String> {
+    hits.into_iter()
+        .filter_map(|h| serde_json::from_value::<Hit>(h).ok())
+        .map(|h| h.claim_id)
+        .filter(|id| crate::links::is_claim_id(id))
+        .collect()
+}
+
 /// Lighthouse's `time_filter`: the narrowest window that still contains `after`.
 fn time_filter(after: Timestamp, now: Timestamp) -> Option<&'static str> {
     let age = now - after;
@@ -89,11 +98,12 @@ impl Odysee {
     ) -> Result<(usize, Vec<crate::claim::Claim>)> {
         let mut url = url;
         url.query_pairs_mut().extend_pairs(params);
-        let hits: Vec<Hit> = self.api.get_json(url).await?;
-        let ids: Vec<String> = hits.into_iter().map(|h| h.claim_id).collect();
-        let count = ids.len();
+        let hits: Vec<serde_json::Value> = self.api.get_json(url).await?;
+        // Paging follows Lighthouse's own count, malformed entries included.
+        let count = hits.len();
+        let ids = hit_ids(hits);
         if ids.is_empty() {
-            return Ok((0, Vec::new()));
+            return Ok((count, Vec::new()));
         }
         Ok((count, self.claims_by_ids(&ids).await?))
     }
@@ -142,6 +152,21 @@ impl Search for Odysee {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn skips_malformed_hits() {
+        let real: Vec<serde_json::Value> =
+            serde_json::from_str(include_str!("../tests/fixtures/lighthouse_search.json")).unwrap();
+        assert_eq!(hit_ids(real).len(), 4);
+        let odd = serde_json::json!([
+            {"name": "no-id"},
+            {"claimId": null},
+            {"claimId": "not-a-claim-id"},
+            {"claimId": "e353cab7a627cea4e468959ddefa66bcdf907dc6", "name": "ok"},
+        ]);
+        let ids = hit_ids(serde_json::from_value(odd).unwrap());
+        assert_eq!(ids, ["e353cab7a627cea4e468959ddefa66bcdf907dc6"]);
+    }
 
     #[test]
     fn picks_the_narrowest_time_filter() {

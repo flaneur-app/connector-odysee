@@ -251,6 +251,25 @@ impl Api {
         read_json(response).await
     }
 
+    /// The first `len` bytes of a file, and the status: no error mapping, the caller reads it.
+    pub async fn head_bytes(&self, url: Url, len: u64) -> Result<(StatusCode, Vec<u8>)> {
+        let response = self
+            .http
+            .get(url)
+            .header(header::RANGE, format!("bytes=0-{}", len.saturating_sub(1)))
+            .send()
+            .await
+            .map_err(|e| network(&e))?;
+        let status = response.status();
+        if !status.is_success() {
+            return Ok((status, Vec::new()));
+        }
+        let bytes = response.bytes().await.map_err(|e| network(&e))?;
+        // A server that ignores `Range` sends the whole file: keep only the head.
+        let len = usize::try_from(len).unwrap_or(usize::MAX).min(bytes.len());
+        Ok((status, bytes[..len].to_vec()))
+    }
+
     /// GETs a small text document; `None` on 404.
     pub async fn get_text(&self, url: Url) -> Result<Option<String>> {
         let response = self.http.get(url).send().await.map_err(|e| network(&e))?;

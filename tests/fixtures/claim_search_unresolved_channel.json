@@ -1,0 +1,134 @@
+{
+ "jsonrpc": "2.0",
+ "id": 1,
+ "result": {
+  "blocked": {
+   "channels": [],
+   "total": 0
+  },
+  "items": [
+   {
+    "canonical_url": "lbry://@undecidedmf#a/why-gm-and-catl-are-betting-on-a-more#1",
+    "claim_id": "1cd026a24b80c43247675c5a051d27491f6ddbdd",
+    "is_channel_signature_valid": true,
+    "meta": {
+     "creation_timestamp": 1794367098,
+     "effective_amount": "0.002"
+    },
+    "name": "why-gm-and-catl-are-betting-on-a-more",
+    "permanent_url": "lbry://why-gm-and-catl-are-betting-on-a-more#1cd026a24b80c43247675c5a051d27491f6ddbdd",
+    "signing_channel": {
+     "canonical_url": "lbry://@undecidedmf#a",
+     "claim_id": "a87ee0c50662b13f11b6fdd3eefd4cee17930599",
+     "has_signing_key": false,
+     "meta": {
+      "creation_timestamp": 1612299728,
+      "effective_amount": "31805.316"
+     },
+     "name": "@undecidedmf",
+     "permanent_url": "lbry://@undecidedmf#a87ee0c50662b13f11b6fdd3eefd4cee17930599",
+     "timestamp": 1612300790,
+     "value": {
+      "cover": {
+       "url": "https://thumbnails.lbry.com/banner-UCjtUS7-SZTi6pXjUbzGHQCg"
+      },
+      "description": "As a UI/UX designer by trade, I explore how sustainable and smart technologies impact our lives. And I try to dive deeper into those topics to provide context.\n\nTopics like electric vehicles, solar pa",
+      "thumbnail": {
+       "url": "https://thumbnails.lbry.com/UCjtUS7-SZTi6pXjUbzGHQCg"
+      },
+      "title": "Undecided with Matt Ferrell"
+     },
+     "value_type": "channel"
+    },
+    "timestamp": 1794367098,
+    "value": {
+     "description": "Why GM Just Bet $71M on Sodium Batteries. Micro Center is THE Ai Destination: https://micro.center/4d3f3b Sign up for a FREE 128 Gig Flash Drive at Micro Center’s Austin location: https://micro.center",
+     "languages": [
+      "en"
+     ],
+     "license": "Copyrighted (contact publisher)",
+     "release_time": "1794268800",
+     "source": {
+      "hash": "26a95991790b58f68e6c466373b2c08825428df6962afd51f45500a0be4c982433f24871775d69d77c72a52ac0e8e61e",
+      "media_type": "video/mp4",
+      "name": "why-gm-and-catl-are-betting-on.mp4",
+      "sd_hash": "002317d04c42a040f4652115d6a45b8601e67f7d9596ac0c08287ec0e79628e89afbd2f299f7e8a8fff5841be14b4fba",
+      "size": "163929829"
+     },
+     "stream_type": "video",
+     "tags": [
+      "battery",
+      "battery energy storage system",
+      "battery technology",
+      "catl",
+      "clean energy",
+      "energy storage",
+      "general motors",
+      "grid energy storage",
+      "hard carbon anode",
+      "lithium ion battery",
+      "news",
+      "peak energy",
+      "science",
+      "sodium battery",
+      "sodium ion battery",
+      "undecided",
+      "undecided with matt ferrell"
+     ],
+     "thumbnail": {
+      "url": "https://thumbnails.lbry.com/o-gT5mlNOFM"
+     },
+     "title": "Why GM and CATL Are Betting On a More Expensive Battery",
+     "video": {
+      "duration": 906,
+      "height": 960,
+      "width": 1920
+     }
+    },
+    "value_type": "stream"
+   },
+   {
+    "canonical_url": "lbry://249-Cats-2011#8",
+    "claim_id": "8b49489378e30d391576c5603d418732bf2f2f34",
+    "is_channel_signature_valid": false,
+    "meta": {
+     "creation_timestamp": 1782919322,
+     "effective_amount": "0.001"
+    },
+    "name": "249-Cats-2011",
+    "permanent_url": "lbry://249-Cats-2011#8b49489378e30d391576c5603d418732bf2f2f34",
+    "signing_channel": {
+     "channel_id": "8927e178712926bd28c5a44eebacac636c65c3c6"
+    },
+    "timestamp": 1782919322,
+    "value": {
+     "languages": [
+      "en"
+     ],
+     "license": "None",
+     "release_time": "1782918770",
+     "source": {
+      "hash": "4b97602f03b22564b532804ad87515bb51b4fad208ebb7b75d33550a71f29abbe7b3f0966febefe4c0afe2076901598a",
+      "media_type": "video/mp4",
+      "name": "249 Cats 2011.mp4",
+      "sd_hash": "73b75f867f37603595097ee2fb8e8daf45ba661e4ac2d2b90f7fc87e4eb74d9cf5e28a89cebf3970ea0d4ed59e968556",
+      "size": "2545493035"
+     },
+     "stream_type": "video",
+     "thumbnail": {
+      "url": "https://thumbs.odycdn.com/47b4549252a94a762e3d902dc202c02f.webp"
+     },
+     "title": "Cats and kittens - 2011",
+     "video": {
+      "duration": 10547,
+      "height": 480,
+      "width": 640
+     }
+    },
+    "value_type": "stream"
+   }
+  ],
+  "page": 1,
+  "page_size": 2
+ }
+}

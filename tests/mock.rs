@@ -820,6 +820,101 @@ async fn resolve_without_hls_and_of_a_livestream() {
     }
 }
 
+/// An MP4 head with its index after the media, like the 7.4 GB upload that `GStreamer` never started.
+fn index_at_end_head() -> Vec<u8> {
+    let mut head = Vec::new();
+    head.extend_from_slice(&32u32.to_be_bytes());
+    head.extend_from_slice(b"ftypisom");
+    head.resize(32, 0);
+    head.extend_from_slice(&1u32.to_be_bytes());
+    head.extend_from_slice(b"mdat");
+    head.extend_from_slice(&7_446_619_000u64.to_be_bytes());
+    head.resize(4096, 0);
+    head
+}
+
+#[tokio::test]
+async fn files_that_cannot_stream_give_way_to_hls() {
+    let (server, odysee) = setup().await;
+    proxy("claim_search")
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("claim_search_mixed.json")))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/cdn/v6/streams/{VIDEO}/c2d5d1.mp4")))
+        .and(wiremock::matchers::header("range", "bytes=0-4095"))
+        .respond_with(ResponseTemplate::new(206).set_body_bytes(index_at_end_head()))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/cdn/v6/streams/{VIDEO}/{VIDEO_SD_HASH}/master.m3u8"
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_string("#EXTM3U\nv0.m3u8\n"))
+        .mount(&server)
+        .await;
+    let playable = odysee
+        .player()
+        .resolve(&ItemRef::new(service(), VIDEO))
+        .await
+        .unwrap();
+    assert!(playable.streams.is_empty());
+    assert!(playable.hls_manifest.is_some());
+}
+
+#[tokio::test]
+async fn a_refused_file_without_hls_is_unavailable() {
+    let (server, odysee) = setup().await;
+    proxy("claim_search")
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("claim_search_mixed.json")))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/cdn/v6/streams/{VIDEO}/c2d5d1.mp4")))
+        .respond_with(
+            ResponseTemplate::new(401)
+                .set_body_string("this content cannot be accessed at the moment"),
+        )
+        .mount(&server)
+        .await;
+    assert!(matches!(
+        odysee
+            .player()
+            .resolve(&ItemRef::new(service(), VIDEO))
+            .await,
+        Err(Error::Unavailable(_))
+    ));
+}
+
+#[tokio::test]
+async fn search_skips_claims_with_an_unresolved_channel() {
+    let (server, odysee) = setup().await;
+    Mock::given(method("GET"))
+        .and(path("/search"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+            {"claimId": "1cd026a24b80c43247675c5a051d27491f6ddbdd", "name": "a"},
+            {"name": "no-id"},
+            {"claimId": "8b49489378e30d391576c5603d418732bf2f2f34", "name": "cats"},
+        ])))
+        .mount(&server)
+        .await;
+    proxy("claim_search")
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(fixture("claim_search_unresolved_channel.json")),
+        )
+        .mount(&server)
+        .await;
+    let page = odysee
+        .search()
+        .unwrap()
+        .search("cats", &SearchFilters::default(), None)
+        .await
+        .unwrap();
+    assert_eq!(page.items.len(), 2);
+}
+
 #[tokio::test]
 async fn channel_tabs_and_short_links() {
     let (server, odysee) = setup().await;

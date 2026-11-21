@@ -89,6 +89,26 @@ async fn search() {
     assert!(!next.items.is_empty());
 }
 
+/// Some pages carry claims whose channel signature is invalid ("cats", pages 2 and 3, when this
+/// test was written): they must not fail the search.
+#[tokio::test]
+#[ignore = "live"]
+async fn common_queries_parse() {
+    let odysee = odysee();
+    let search = odysee.search().unwrap();
+    for query in ["linux", "music", "news", "gaming", "cats"] {
+        let mut cursor = None;
+        for _ in 0..3 {
+            let page = search
+                .search(query, &SearchFilters::default(), cursor.as_ref())
+                .await
+                .unwrap_or_else(|e| panic!("{query}: {e}"));
+            assert!(!page.items.is_empty(), "{query}");
+            cursor = page.next;
+        }
+    }
+}
+
 #[tokio::test]
 #[ignore = "live"]
 async fn channel_page() {
@@ -156,6 +176,18 @@ async fn resolve_and_related() {
     };
     let playable = player.resolve(&shared).await.unwrap();
     assert_eq!(playable.item.r#ref.id, VIDEO);
+}
+
+/// A 7.4 GB upload whose MP4 index sits after the media, and which Odysee transcoded: only the
+/// HLS ladder can start without fetching the end of the file.
+#[tokio::test]
+#[ignore = "live"]
+async fn huge_files_without_fast_start_play_as_hls() {
+    let odysee = odysee();
+    let huge = ItemRef::new(service(), "d28edf08645451b45230f2165d2cfc65bee15f95");
+    let playable = odysee.player().resolve(&huge).await.unwrap();
+    assert!(playable.streams.is_empty(), "{:?}", playable.streams);
+    assert!(playable.hls_manifest.is_some());
 }
 
 #[tokio::test]
