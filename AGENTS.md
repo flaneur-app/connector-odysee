@@ -6,7 +6,45 @@ This repository inherits the [canonical workspace rules](https://github.com/flan
 
 The Odysee connector of [Flâneur](https://github.com/flaneur-app): the public Odysee backend for content and accounts, and Commentron for comments. It implements the connector traits of [`flaneur-app/core`](https://github.com/flaneur-app/core).
 
-**Status:** bootstrapping.
+**Status:** first version: anonymous reads verified live; account writes (sign-in, reactions,
+comments) only verified against a mock server, no Odysee test account yet.
+
+## Structure
+
+```text
+src/
+├── lib.rs          Odysee, its builder, the Connector impl and Capabilities
+├── http.rs         reqwest client, Endpoints, the three wire formats, error mapping
+├── claim.rs        LBRY claims → Item, Channel, Playlist (kinds, shorts rule, mature tags)
+├── links.rs        odysee.com and lbry:// URLs, ref ids
+├── auth.rs         user/new, password and email-link sign-in, session secret
+├── preference.rs   the wallet's `shared` preference (read-only: follows, collections)
+├── feeds.rs        home categories, trending, shorts, subscription feed
+├── search.rs       Lighthouse search
+├── channels.rs     channel header, tabs, collections
+├── player.rs       CDN streams, HLS probe, reactions, related (Recsys)
+├── comments.rs     Commentron read, post through the proxy's channel_sign
+└── library.rs      history, watch later, follows, reactions
+tests/
+├── mock.rs         exact requests and fixture parsing, against wiremock
+├── live.rs         #[ignore] tests against the real Odysee backend
+└── fixtures/       trimmed real responses
+examples/odysee.rs  home, a search and a resolve, live
+```
+
+Ref ids are full claim ids, or an LBRY URL without its scheme (`@Odysee#8/missinfo#d`) when they
+come from a shared link with short claim ids.
+
+The research behind the endpoints is in
+[`flaneur-app/spikes`](https://github.com/flaneur-app/spikes) (`docs/odysee-research.md`).
+
+## Rules specific to Odysee
+
+- Never write the `shared` preference (`preference_set`, `sync_apply`, `sync/set`): it holds the
+  follows and collections of every Odysee client of the user. Lifting this needs a read-modify-write
+  that keeps unknown keys, the `old_hash` conflict check, and a test account.
+- Never send a `Referer` or `Origin` of `odysee.com`.
+- Reads go to the proxy without `X-Lbry-Auth-Token`: anonymous calls are cached better.
 
 ## License
 
@@ -45,4 +83,6 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo nextest run --workspace --no-tests=pass
 cargo deny check
+cargo nextest run --run-ignored ignored-only   # live tests, network needed
+cargo run --example odysee [query]             # live example
 ```
