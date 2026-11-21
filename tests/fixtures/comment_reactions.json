@@ -1,0 +1,18 @@
+{
+ "jsonrpc": "2.0",
+ "result": {
+  "others_reactions": {
+   "3688eec83cff0de1e73b23d8e1fc72d2ce2b7fb240da8213c79327ce4eff88b7": {
+    "creator_like": 0,
+    "dislike": 13,
+    "like": 140
+   },
+   "5250341307f8ed2b78a063d1b0c3a26633e9abd8dc099704ae136c35563ae376": {
+    "creator_like": 0,
+    "dislike": 6,
+    "like": 244
+   }
+  }
+ },
+ "id": 1
+}

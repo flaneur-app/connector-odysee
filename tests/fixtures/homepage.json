@@ -1,0 +1,85 @@
+{
+ "status": "success",
+ "data": {
+  "en": {
+   "categories": {
+    "EXPLORABLE_CHANNEL": {
+     "name": "explore",
+     "sortOrder": 1,
+     "icon": "MindBlown",
+     "label": "Discover",
+     "description": "Channels to discover on Odysee",
+     "image": "https://player.odycdn.com/speech/featured:b.jpg",
+     "channelLimit": "1",
+     "pageSize": 12,
+     "order": "new",
+     "claimType": [
+      "stream"
+     ],
+     "daysOfContent": 90,
+     "pinnedClaimIds": [
+      "5197148c5e9af84a9e41d5183dddd0a5416d2c67",
+      "b51c57b5899dd5c08c757bfc886992b18ad6756f"
+     ]
+    },
+    "PRIMARY_CONTENT": {
+     "channelIds": [
+      "5b0b41c364c89c5cb13f011823e0d6ee9b89af26",
+      "c1a5fd043a1dbc8ff4ec992aefc482c970e7568e",
+      "fb364ef587872515f545a5b4b3182b58073f230f"
+     ],
+     "name": "featured",
+     "sortOrder": 2,
+     "icon": "Featured",
+     "label": "Featured",
+     "description": "Showcasing some of the best content Odysee has to offer",
+     "image": "https://player.odycdn.com/speech/featured:b.jpg",
+     "channelLimit": "1",
+     "daysOfContent": 60,
+     "exclude_shorts": true,
+     "pageSize": 24,
+     "order": "trending",
+     "claimType": [
+      "stream",
+      "repost"
+     ]
+    },
+    "TECHNOLOGY": {
+     "channelIds": [
+      "604ec1c751082e66a4e449ff42f5e2ed20febc18",
+      "d75a95347a3c8217d9c52069101a52cf236d6cc7",
+      "87693ebff9b380b00a8a12f289e4c62f2dcb198b"
+     ],
+     "name": "tech",
+     "sortOrder": 80,
+     "icon": "Speaker",
+     "label": "Tech",
+     "description": "Hardware, software, startups, photography on Odysee",
+     "image": "https://player.odycdn.com/speech/tech:8b.jpg",
+     "channelLimit": "2",
+     "exclude_shorts": true,
+     "daysOfContent": 180,
+     "pageSize": 12
+    },
+    "SPIRITUALITY": {
+     "channelIds": [
+      "a6697ec8b67e43abf91abe6489bf3db2218e2e20",
+      "d3ca14ed7a9f4d7773b43a72b3953e55ca771a2f",
+      "0ad9a91c09d1779e1a756c384a63151052e7678c"
+     ],
+     "hideByDefault": true,
+     "name": "spirituality",
+     "sortOrder": 80,
+     "icon": "Spirituality",
+     "label": "Spirituality",
+     "description": "Get your spiritual side on with our Spirituality category",
+     "channelLimit": "1",
+     "exclude_shorts": true,
+     "daysOfContent": 180,
+     "pageSize": 12
+    }
+   }
+  },
+  "fr": null
+ }
+}
