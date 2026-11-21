@@ -1,0 +1,47 @@
+[package]
+name = "flaneur-connector-odysee"
+description = "Odysee connector of Flâneur: the public Odysee backend for content and accounts, and Commentron for comments."
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/flaneur-app/connector-odysee"
+rust-version = "1.100"
+publish = false
+
+[dependencies]
+flaneur-connector = { git = "https://github.com/flaneur-app/core", branch = "feat/core-structure" }
+flaneur-model = { git = "https://github.com/flaneur-app/core", branch = "feat/core-structure" }
+
+async-trait = "0.1.92"
+getrandom = "0.2.17"
+percent-encoding = "2.3.2"
+reqwest = { version = "0.13.5", default-features = false, features = [
+  "charset",
+  "form",
+  "gzip",
+  "http2",
+  "json",
+  "query",
+  "rustls-no-provider",
+  "system-proxy",
+] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-platform-verifier = "0.7.1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+tokio = { version = "1.54.1", features = ["macros"] }
+tracing = { version = "0.1.44", default-features = false, features = ["std"] }
+url = "2.5.9"
+
+[dev-dependencies]
+tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread"] }
+wiremock = "0.6.5"
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
